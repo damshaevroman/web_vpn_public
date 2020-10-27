@@ -1,0 +1,13 @@
+*.pyc
+*~
+__pycache__
+myvenv
+db.sqlite3
+hotbase.sqlite3
+.DS_Store
+vpn_settings.ini
+celerybeat-schedule
+static
+venv
+
+

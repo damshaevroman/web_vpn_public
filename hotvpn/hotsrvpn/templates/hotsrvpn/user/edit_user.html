@@ -1,0 +1,76 @@
+{% extends "hotsrvpn/base.html" %}
+{% load static %}
+{% block content %}
+    <div class="row">
+        <div class="col-5">
+            <form id="save_edit_user_form">
+                    {% csrf_token %}
+
+                    <p>Information about user</p>
+                    <input value="{{user.organisation}}"  type="text" name="organization" placeholder="Organization" class="form-control form-control-user" id="organization" maxlength="20" required="">
+                    <input value="{{user.user_city}}" type="text" name="user_city" placeholder="City" class="form-control form-control-user" id="user_city" maxlength="20" required="">
+                    <input value="{{user.user_fio}}" type="text" name="user_fio" placeholder="FIO" class="form-control form-control-user" id="user_fio" maxlength="20" required="">
+                    <input value="{{user.user_cert}}" type="text" name="user_cert" placeholder="Name certification" class="form-control form-control-user" id="user_cert" maxlength="20" required="" readonly="readonly">
+                    <br>
+            <!-- Show download buttons if certificate created-->
+                <script>var status_cert = "{{ check_certeficate_status }}"</script>
+
+                    <div id="div_download_certificate" style="display: none">
+{#                        {% if check_certeficate_status == True %}#}
+                           <div>
+                               <div id="download_certificate_linux" >
+                                   <a href="/download/{{user.user_cert}}/{{user.user_cert}}.conf" class="btn btn-success btn-icon-split">
+                                       <span class="icon text-white-50">
+                                           <i class="fas fa-check"></i>
+                                       </span>
+                                       <span class="text">Download for Linux</span>
+                                   </a>
+                               </div>
+                               <br>
+                               <div id="download_certificate_windows">
+                                   <a href="/download/{{user.user_cert}}/{{user.user_cert}}.ovpn" class="btn btn-success btn-icon-split">
+                                       <span class="icon text-white-50">
+                                           <i class="fas fa-check"></i>
+                                       </span>
+                                       <span class="text">Download for Windows</span>
+                                   </a>
+                               </div>
+                           </div>
+{#                        {% endif %}#}
+                    </div>
+
+            </form>
+
+    </div>
+        <div class="col-5" >
+
+            <p id="cert_exist">Certificate exist: {{ check_certeficate_status }} </p>
+            <p id="cert_date">Date of creation: {{ user.user_date_of_creation_certificate}}</p>
+
+
+        </div>
+
+{#        <script>var status_button = "{{ check_certeficate_status }}" </script>#}
+        <script src="/static/user/edit_user_logic.js"></script>
+    </div>
+
+{% endblock %}
+
+{% block edit_buttons %}
+    <li class="top_buttons">
+        <a class="nav-link" role="button" id="save_and_exit">Save and Exit</a>
+    </li>
+
+    <li class="top_buttons">
+        <a class="nav-link"  href="/vpn/user/">Exit</a>
+    </li>
+
+    <li class="top_buttons" >
+        <a class="nav-link"  role="button" id="delete_hotel">Delete hotel</a>
+    </li>
+
+    <li class="top_buttons">
+        <a class="nav-link"  role="button" id="create_certificate">Create certificate</a>
+    </li>
+
+{% endblock %}

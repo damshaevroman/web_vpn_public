@@ -1,0 +1,86 @@
+{% extends "hotsrvpn/base.html" %}
+{% load static %}
+
+{% block content %}
+    <p class="collapse-item" id="status_bar_text" align="center"> Press "start deploy" button for begin deploying</p>
+    <div class="progress mb-4">
+       <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100" id="process_status"></div>
+    </div>
+        <form id="deployForm">
+                        {% csrf_token %}
+
+                         <div class=container-fluid>
+                             <div  class="row" >
+                                 <div class="col-5">
+                                     {{ form.client_login}}
+                                     {{ form.client_ip }}
+                                     {{ form.client_port }}
+                                     {{ form.client_password }}
+                                     {{ form.client_sudo_password }}
+                                     <p id="check_passwords"></p>
+                                     {{ form.uplink_interface }}
+                                     {{ form.hotel_id }}
+
+                                     <div id="div_hostname" style="display: none">{{ form.hostname }}</div>
+                                     <div id="git_div" style="display: none">
+                                         <p>Git</p>
+                                         {{ form.git_login }}
+                                         {{ form.git_password }}
+                                     </div>
+                                     <div id="dhcp_div" style="display: none">
+                                         <br>
+                                         {{ form.dhcp_interface }}
+                                         <br>
+                                         <p>DHCP config</p>
+                                         {{ form.dhcp_network }}
+                                         {{ form.dhcp_mask }}
+                                         {{ form.dhcp_range_start }}
+                                         {{ form.dhcp_range_end }}
+                                         {{ form.domain_name }}
+                                         {{ form.dhcp_dns }}
+                                         {{ form.dhcp_broadcast }}
+                                         {{ form.dhcp_gateway }}
+                                     </div>
+                                     <label> Packages for Installing</label>
+                                      {{ form.install_packeges }}
+                                 </div>
+                                 <div class="col-4">
+                                     <div class="col-sm"><p>Packages</p> <img src=/static/img/download.gif height="25" width="25" id="download_gif" style="display: none" class="download_gif">
+                                         <div  id="feedback_install_messsages" >
+                                         </div>
+                                     </div>
+                                 </div>
+                                 <div class="col-3">
+                                     <div class="col-sm"><p>Configs</p><img src=/static/img/download.gif height="25" width="25" id="download_gif2" style="display: none" class="download_gif">
+                                         <div id="feedback_task_messsages"></div>
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+        </form>
+
+            <script src="/static/js/deploy_client/check_box_logic.js"></script>
+            <script src="/static/js/deploy_client/request_task_and_packages.js"></script>
+            <script src="/static/js/deploy_client/logic_datahost.js"></script>
+            {% endblock %}
+            {% block edit_buttons %}
+                <div class="container">
+                    <div class="dropdown">
+                          <a class="nav-link dropdown-toggle" role="button" data-toggle="dropdown"  >Additionally</a>
+
+                        <div class="dropdown-menu">
+                          <a class="dropdown-item" >{{ form.dhcp_checkbox }}{{ form.dhcp_checkbox.label }}</a>
+                          <a class="dropdown-item" >{{ form.git_checkbox }}{{ form.git_checkbox.label }}</a>
+                          <a class="dropdown-item" >{{ form.hostname_checkbox }}{{ form.hostname_checkbox.label }}</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="container" onclick="start_deploy()">
+                    <a class="nav-link"  role="button" id="start_deploy_server" disabled="false" style="display: none" onclick="start_deploy()">Start deploy</a>
+                </div>
+
+
+
+            {% endblock %}
+
+

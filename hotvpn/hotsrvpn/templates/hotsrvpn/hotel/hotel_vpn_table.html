@@ -1,0 +1,51 @@
+{% extends "hotsrvpn/base.html" %}
+{% block content %}
+<div id="create_form" style="display: none; margin-right: 60%; margin-left: 2.5% ">
+    <form id="form_hotel" method="post" >
+              {% csrf_token %}
+                        {{ hotel_form.hotel_admin_id }}
+                        {{ hotel_form.hotel_country }}
+                        {{ hotel_form.hotel_city }}
+                        {{ hotel_form.hotel_name }}
+                        {{ hotel_form.hotel_name_certification }}
+                        {{ hotel_form.hotel_ip_address }}
+                        {{ hotel_form.hotel_port }}<br>
+        <button type="button" class="btn btn-primary" id="create_hotel_button">Create hotel</button>
+      </form><br>
+
+</div>
+         <script src="/static/hotel/hotel_logic.js"></script>
+         <script src="/static/hotel/search_hotel.js"></script>
+         <div class="container-fluid hotel_scroll" id="search_table" name="search_table" >
+         <input type="search" class="form-control" id="search" autofocus><br>
+         <table class="table table-striped table-bordered table-hover" id=mytable>
+            <thead>
+              <tr>
+                <th>Hotel ID</th>
+                <th>Country</th>
+                <th>City</th>
+                <th>Hotel name</th>
+                <th>Ceritifcate name</th>
+                <th>public ip address</th>
+                <th>port</th>
+                <th>VPN ip address</th>
+                <th>port</th>
+                <th>Date of create</th>
+                <th>Edit</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+    </div>
+{% endblock %}
+
+{% block edit_buttons %}
+    <li class="top_buttons" >
+        <a class="nav-link"  role="button" id="show_form_button" style="display:block" onclick="show_form()">    Show create hotel form</a>
+    </li>
+    <li class="top_buttons">
+        <a class="nav-link"  role="button" id="hide_form_button" style="display:none" onclick="hide_form()">    Hide create hotel form</a>
+    </li>
+{% endblock %}
