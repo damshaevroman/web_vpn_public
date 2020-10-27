@@ -1,5 +1,5 @@
 # web_vpn_public beta 0.1
-This is webgui app for openvpn.
+This is webgui app for openvpn and deploy ubuntu servers via ansible.
 For deploy server need. 
 1.requirements.txt (in directory hotvpn)
 2. Gunicorn
