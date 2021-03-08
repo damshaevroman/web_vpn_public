@@ -34,10 +34,32 @@ class DataForm(forms.Form):
                                                                                                        'id': 'dhcp_checkbox',
                                                                                                        'class': 'form-check-input',
                                                                                                        'form': 'deployForm'}))
-    git_checkbox = forms.CharField(required=False, label="Download from git", widget=forms.TextInput(attrs={'type': 'checkbox',
-                                                                                                            'id': 'git_checkbox',
-                                                                                                            'class': 'form-check-input',
-                                                                                                            'form': 'deployForm'}))
+
+
+
+    git_tv = forms.CharField(required=False, label="TVTV",
+                                   widget=forms.TextInput(attrs={'type': 'checkbox',
+                                                                 'id': 'tv',
+                                                                 'class': 'form-check-input',
+                                                                 'form': 'deployForm'}))
+
+    git_daemon = forms.CharField(required=False, label="daemon",
+                                   widget=forms.TextInput(attrs={'type': 'checkbox',
+                                                                 'id': 'git_daemon',
+                                                                 'class': 'form-check-input',
+                                                                 'form': 'deployForm'}))
+
+    git_streamer = forms.CharField(required=False, label="streamer",
+                                   widget=forms.TextInput(attrs={'type': 'checkbox',
+                                                                 'id': 'git_streamer',
+                                                                 'class': 'form-check-input',
+                                                                 'form': 'deployForm'}))
+
+
+
+
+
+
     hostname_checkbox = forms.CharField(required=False, label="Change hostname", widget=forms.TextInput(attrs={'type': 'checkbox',
                                                                                                                'id': 'hostname_checkbox',
                                                                                                                'class': 'form-check-input',
@@ -62,10 +84,12 @@ class DataForm(forms.Form):
 
     uplink_interface = forms.CharField(required=False, max_length=20, widget=forms.TextInput(attrs={'placeholder': 'uplink internet interface ',
                                                                                                     'class': 'form-control form-control-user', 'id': "uplink_interface"}))
-    dhcp_interface = forms.CharField(required=False, max_length=20, widget=forms.TextInput(attrs={'placeholder': 'DHCP interface',
-                                                                                                   'style': 'display: none;', 'class': 'form-control form-control-user', 'id': "dhcp_interface"}))
-    hotel_id = forms.CharField(required=True, label="hotel_id", max_length=100, widget=forms.TextInput(attrs={'placeholder': 'Hotel ID',
-                                                                                                               'class': 'form-control form-control-user', 'id': 'hotel_id'}))
+    dhcp_interface = forms.CharField(required=False, max_length=20, widget=forms.TextInput(attrs={'placeholder': 'enter name DHCP interface',
+                                                                                                    'class': 'form-control form-control-user', 'id': "dhcp_interface"}))
+    hotel_id = forms.CharField(label="hotel_id", max_length=100, widget=forms.TextInput(attrs={'placeholder': 'Hotel ID',
+                                                                                                               'class': 'form-control form-control-user',
+                                                                                                              'id': 'hotel_id',
+                                                                                                              'form': 'FormDeploy'}))
     hostname = forms.CharField(required=False, label="hostname", max_length=100, widget=forms.TextInput(attrs={'placeholder': 'Change hostname',
                                                                                                                'class': 'form-control form-control-user', 'id': 'hostname'}))
 

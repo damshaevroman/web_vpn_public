@@ -6,8 +6,8 @@ from rest_framework.response import Response
 
 from .forms import Hotels_form
 from hotsrvpn.businesslogic.hotel_edit import Hotel_edit
-import json, os, logging
 from hotsrvpn.businesslogic.serializer import HotelSerializer
+from django.http import FileResponse
 
 
 @login_required(login_url='/')
@@ -17,45 +17,21 @@ def render_hotel_main_page(request):
     hotel_edit.get_database()
     return render(request, 'hotsrvpn/hotel/hotel_vpn_table.html', {"hotel_form": hotel_form})
 
-
-"""Get data from Form and add to database Hotel table"""
-
-
+@api_view(['POST'])
 def create_hotel_view(request):
-    if request.is_ajax and request.method == "POST":
-        form = Hotels_form(request.POST)
-        hotel_add = Hotel_edit()
-        if form.is_valid():
-            hotel_admin_id = form.cleaned_data.get("hotel_admin_id")
-            hotel_country = form.cleaned_data.get("hotel_country")
-            hotel_city = form.cleaned_data.get("hotel_city")
-            hotel_name = form.cleaned_data.get("hotel_name")
-            hotel_name_certification = form.cleaned_data.get("hotel_name_certification")
-            hotel_name_certification = hotel_name_certification.replace(' ', '')
-            hotel_ip_address = form.cleaned_data.get("hotel_ip_address")
-            hotel_port = form.cleaned_data.get("hotel_port")
-            hotel_context = {"hotel_country": hotel_country,
-                             "hotel_city": hotel_city,
-                             "hotel_name": hotel_name,
-                             "hotel_name_certification": hotel_name_certification,
-                             "hotel_admin_id": hotel_admin_id,
-                             "hotel_ip_address": hotel_ip_address,
-                             "hotel_port": hotel_port}
-            result = hotel_add.write_hotel_to_database(hotel_context)
-            hotel_add.get_database()
-            return JsonResponse({"result": result}, status=200)
+    """Get data from Form and add to database Hotel table"""
+    if request.method == "POST":
+        hotelSerialize = HotelSerializer(data=request.data)
+        if hotelSerialize.is_valid():
+            hotelData = Hotel_edit()
+            hotel_json = hotelData.write_hotel_to_database(hotelSerialize)
+            return Response(hotel_json.data, status=200)
+        return Response(hotelSerialize.errors, status=400)
 
-        else:
-            errors = hotel_add.processing_form_errors(form)
-            return JsonResponse({"error": errors}, status=430)
-    return JsonResponse({"error": "не могу покдлючится проверьте данные"}, status=450)
-
-
-'''в данном блоке загружаю файл с именами и ip адресами в из файла в словарь и потом ищу по полю short_name ip 
-address '''
-
-
+@login_required(login_url='/')
 def show_edit_hotel_page(request, id):
+    """в данном блоке загружаю файл с именами и ip адресами в из файла в словарь и потом ищу по полю short_name ip
+    address """
     status_certificate = Hotel_edit()
     result = status_certificate.check_ip_vpn_address(id)
     hotel_form = Hotels_form()
@@ -64,11 +40,9 @@ def show_edit_hotel_page(request, id):
                   {"result": result, "hotel": hotel, "hotel_form": hotel_form,
                    "check_certeficate_status": check_certeficate_status})
 
-
-''' get information from HTML page edti_user (form -  save_edit_hotel_form) change and save infortation to database table Hotel'''
-
-
 def save_edit_hotel_form(request):
+    """ get information from HTML page edti_user (form -  save_edit_hotel_form) change and save infortation to
+    database table Hotel """
     if request.is_ajax and request.method == "POST":
         form = Hotels_form(request.POST)
         hotel_save = Hotel_edit()
@@ -101,11 +75,8 @@ def save_edit_hotel_form(request):
             return JsonResponse({"error": errors}, status=430)
     return JsonResponse({"error": "не могу покдлючится проверьте данные"}, status=450)
 
-
-'''delete hotel certificate from server and database'''
-
-
 def delete_hotel(request):
+    """delete hotel certificate from server and database"""
     if request.is_ajax and request.method == "POST":
         form = Hotels_form(request.POST)
         hotel_add = Hotel_edit()
@@ -119,11 +90,8 @@ def delete_hotel(request):
             return JsonResponse({"error": errors}, status=430)
     return JsonResponse({"error": "не могу покдлючится проверьте данные"}, status=450)
 
-
-''' create holte certificate in /etc/openvpn/clinet'''
-
-
 def create_hotel_certificate(request):
+    """ create hotel certificate in /etc/openvpn/client"""
     if request.is_ajax and request.method == "POST":
         form = Hotels_form(request.POST)
         cert_create = Hotel_edit()
@@ -137,11 +105,8 @@ def create_hotel_certificate(request):
             return JsonResponse({"error": errors}, status=430)
     return JsonResponse({"error": "не могу покдлючится проверьте данные"}, status=450)
 
-
-'''get status of exist certificate'''
-
-
 def get_status_cerificate(request):
+    """get status of exist certificate"""
     if request.is_ajax and request.method == "GET":
         check_certificate = Hotel_edit()
         hotel_certification = request.GET.get("hotel_name_certification")
@@ -149,10 +114,8 @@ def get_status_cerificate(request):
         return JsonResponse({"result": result}, status=200)
 
 
-'''Copy certificate openvpn to remote host '''
-
-
 def copy_certificate_to_host(request):
+    """Copy certificate openvpn to remote host """
     if request.is_ajax and request.method == "POST":
         form_send_cert = Hotels_form(request.POST)
         send_cert = Hotel_edit()
@@ -170,15 +133,22 @@ def copy_certificate_to_host(request):
             return JsonResponse({"error": errors}, status=430)
     return JsonResponse({"error": "не могу покдлючится проверьте данные"}, status=450)
 
-
+@api_view(['GET'])
 def render_hotel_json(request):
     if request.is_ajax and request.method == "GET":
         json = Hotel_edit()
         hotel_json = json.get_hotel_json()
-        return JsonResponse({"hotel_json": hotel_json}, status=200)
-
+        return Response(hotel_json.data, status=200)
 
 def create_vpn_server(request):
     return render(request, 'hotsrvpn/404.html')
 
-
+@api_view(['POST'])
+def send_file_front(request):
+    """This method send file certificate to browser"""
+    if request.is_ajax and request.method == "POST":
+        data = request.data.dict()
+        data = data["hotel_name_certification"]
+        cert = open(f'/etc/openvpn/client/{data}/{data}.conf', 'rb')
+        response = FileResponse(cert.read().decode('utf8'))
+        return response

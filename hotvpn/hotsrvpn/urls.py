@@ -7,13 +7,15 @@ urlpatterns = [
     # user pages urls
     path('user/', render_user_main_page),
     path('user/create_user/', create_user, name='create_user'),
-    path('user/edit_user/<int:id>/', show_edit_user_page),
+    path('user/edit_user/<int:id>', show_edit_user_page, name='show_edit_user_page'),
     path('user/save_edit_user_form/', save_edit_user_form, name='save_edit_user_form'),
     path('user/delete_user/', delete_user, name="delete_user"),
     path('user/create_user_certificate/', create_user_certificate, name="create_certificate"),
     path('user/copy_certificate_to_host/', copy_certificate_to_host, name="copy_certificate_to_host"),
     path('user/render_user_json/', render_user_json, name="render_user_json"),
     path('user/get_user_json/', render_user_json, name="render_user_json"),
+    path('user/get_json/', render_user_json, name="render_user_json"),
+    path('user/getUserFile/', send_user_file_front, name="send_user_file_front"),
 
 
     path('hotel/', render_hotel_main_page),
@@ -25,6 +27,7 @@ urlpatterns = [
     path('hotel/get_status_cerificate/', get_status_cerificate, name="get_status_cerificate"),
     path('hotel/copy_certificate_to_host/', copy_certificate_to_host, name="copy_certificate_to_host"),
     path('hotel/get_json/', render_hotel_json, name="render_hotel_json"),
+    path('hotel/getFile/', send_file_front, name="send_file_front"),
 
     path('create_vpn_server/', create_vpn_server),
 

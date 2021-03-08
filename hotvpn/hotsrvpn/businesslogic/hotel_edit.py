@@ -11,6 +11,7 @@ from django.core import serializers
 from scp import SCPClient
 from hotvpn.settings import config_settings
 from hotsrvpn.models import Hotel
+from hotsrvpn.businesslogic.serializer import HotelSerializer
 
 
 store_cert_path = config_settings["Config"]["certificate_store_path"]
@@ -28,27 +29,11 @@ class Hotel_edit():
 
     ''' Create users and add to database Hotel table'''
 
-    def write_hotel_to_database(self, hotel_context):
+    def write_hotel_to_database(self, hotelSerialize):
         try:
-            hotel = Hotel()
-            hotel.hotel_admin_id = hotel_context["hotel_admin_id"]
-            hotel.hotel_country = hotel_context["hotel_country"]
-            hotel.hotel_city = hotel_context["hotel_city"]
-            hotel.hotel_name = hotel_context["hotel_name"]
-            hotel.hotel_name_certification = hotel_context["hotel_name_certification"]
-            try:
-                hotel.hotel_ip_address = hotel_context["hotel_ip_address"]
-            except:
-                print('Write ip')
-                hotel.hotel_ip_address = '0.0.0.0'
-            try:
-                hotel.hotel_port = hotel_context["hotel_port"]
-            except:
-                print('Write port')
-                hotel.hotel_port = '0.0.0.0'
-
-            hotel.save()
-            return "Hotel added in database"
+            hotelSerialize.save()
+            hotel_json = self.get_hotel_json()
+            return hotel_json
         except Exception as error:
             logging.warning(error)
             return str(error)
@@ -73,7 +58,6 @@ class Hotel_edit():
             hotel = Hotel.objects.get(id=id)
             name = hotel.hotel_name_certification
             try:
-
                 file = open("/etc/openvpn/ip_clients.txt")
                 d = file.read().split("\n")[:-1]
                 dict2 = dict()
@@ -91,10 +75,12 @@ class Hotel_edit():
                 hotel.hotel_vpn_address = default
 
 
-    '''render hotel edit page check download button which appear if find on server '''
+
     def edit_hotel_page(self, id):
+        """render hotel edit page check download button which appear if find on server """
         try:
             hotel = Hotel.objects.get(id=id)
+            print('This hotel - ' + str(hotel.hotel_name_certification))
             hotel_cert = hotel.hotel_name_certification
             path = store_cert_path + str(hotel_cert) + '/' + str(hotel_cert) + ".conf"
             check_certificate_status = os.path.isfile(path)
@@ -108,7 +94,6 @@ class Hotel_edit():
     def save_change_hotel(self, hotel_context):
         try:
             hotel = Hotel.objects.get(hotel_name_certification=hotel_context["hotel_name_certification"])
-
             hotel.hotel_admin_id = hotel_context["hotel_admin_id"]
             hotel.hotel_country = hotel_context["hotel_country"]
             hotel.hotel_city = hotel_context["hotel_city"]
@@ -152,10 +137,10 @@ class Hotel_edit():
                 return data
 
             else:
-                script_path = "sudo /etc/openvpn/easy-rsa/./auto_uservpn.sh " + str(hotel_name_certification)
+                script_path = "sh /etc/openvpn/easy-rsa/auto_uservpn.sh " + str(hotel_name_certification)
                 os.system(script_path)
                 time = date.today()
-                time = time.strftime("%d/%m/%Y")
+                time = time.strftime("%Y-%m-%d")
                 hotel.hotel_date_of_creation_certificate = time
                 hotel.save()
                 data = {"result": True,
@@ -170,7 +155,7 @@ class Hotel_edit():
 
     '''check certificate on server and callback true or false'''
     def ckeck_status_cerificate(self, hotel_name_certification):
-        path = store_cert_path +hotel_name_certification + '/' + hotel_name_certification + '.conf'
+        path = store_cert_path + hotel_name_certification + '/' + hotel_name_certification + '.conf'
         if os.path.isfile(path):
             return False
         else:
@@ -183,7 +168,8 @@ class Hotel_edit():
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             try:
                 ssh.connect(ip, port=int(port), timeout=10, username=login, password=password)
-            except:
+            except Exception as error:
+                logging.warning(error)
                 return False
             scp = SCPClient(ssh.get_transport())
 
@@ -196,8 +182,10 @@ class Hotel_edit():
 
     '''create json object from database'''
     def get_hotel_json(self):
-        hotel_json = Hotel.objects.all()
-        hotel_json = serializers.serialize("json", hotel_json)
+        hotel_json = Hotel.objects.all().order_by('hotel_admin_id')
+        hotel_json = HotelSerializer(hotel_json, many=True)
+        # hotel_json = serializers.serialize('json', hotel_json)
+
         return hotel_json
 
 

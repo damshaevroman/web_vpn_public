@@ -3,12 +3,15 @@ from hotsrvpn.models import Hotel, Hotel_User
 import json, psutil, re, logging
 from django.core import serializers
 import cpuinfo
+from dashboard.models import ServerHardware
 
 
 class Dashboard():
     def __init__(self):
         pass
+
     '''this is method get data from hotel'''
+
     def vpnCounter(self):
         count_hotel = str(Hotel.objects.count())
         count_user = str(Hotel_User.objects.count())
@@ -19,16 +22,47 @@ class Dashboard():
                          "count_ping_active": count_ping_active,
                          "count_ping_lost": count_ping_lost}
         return count_context
-    '''get data of server cpu and memory'''
-    def server_status(self):
-        cpu2 = cpuinfo.get_cpu_info_json()
-        cpu_utilization = psutil.cpu_percent()
+
+    def get_memory_information(self):
+        """This method get memory information from server which use in status bar about load server"""
         memory = str(psutil.virtual_memory())
         memory = re.sub("^\s+|[()]|svmem|", '', memory)
         memory = memory.split()
         memory_availble = re.sub("^\s+|'|=|,|total|", '', memory[0])
         memory_percent = re.sub("^\s+|'|=|,|percent|", '', memory[2])
         memory_availble = float(memory_availble) // 1048576
+        return memory_percent, memory_availble
+
+    def server_info(self):
+        serverData = ServerHardware.objects.filter(server_info="server_info")
+        serverData = serializers.serialize('json', serverData)
+        serverData = json.loads(serverData)
+        for data in serverData:
+            serverInfo = data["fields"]
+        return serverInfo
+
+    def write_server_infomation(self):
+        """This method write information (model processor, memory and other) in database"""
+        cpu = cpuinfo.get_cpu_info_json()
+        cpu = json.loads(cpu)
+        memory_percent, memory_availble = self.get_memory_information()
+        try:
+            ServerHardware.objects.all().delete()
+            server_harw = ServerHardware()
+            server_harw.arch = cpu["arch"]
+            server_harw.brand_raw = cpu["brand_raw"]
+            server_harw.hz_advertised_friendly = cpu["hz_advertised_friendly"]
+            server_harw.l3_cache_size = cpu["l3_cache_size"]
+            server_harw.ram_total = memory_availble
+            server_harw.save()
+        except Exception as error:
+            logging.warning(error)
+
+    def status_memory_cpu_utilization(self):
+        """get data of server cpu and memory"""
+        cpu2 = cpuinfo.get_cpu_info_json()
+        cpu_utilization = psutil.cpu_percent()
+        memory_percent, memory_availble = self.get_memory_information()
         server_status = {
             "cpu_utilization": cpu_utilization,
             "memory_availble": memory_availble,
@@ -55,8 +89,10 @@ class Dashboard():
             else:
                 ip_list.append(ip[0])
         for ip in ip_list:
+            ip = ip.replace(' ', '')
             try:
-                result = subprocess.Popen(["fping", ip], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                result = subprocess.Popen(["fping", ip], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
                 result = result.communicate()
                 result = str(result[0])
                 print('THIS is RESULT ' + str(result))
@@ -78,8 +114,6 @@ class Dashboard():
                 except Exception as error:
                     logging.warning(error)
 
-
-
     '''create list of hosts which dont have vpn address and sent to front'''
     def non_ip_host(self):
         try:
@@ -89,5 +123,8 @@ class Dashboard():
         except Exception as error:
             logging.warning(error)
         list_unavailible_host = serializers.serialize('json', list_unavailible_host)
+        print(list_unavailible_host)
         return count_context, list_unavailible_host
 
+""" Write to database """
+Dashboard().write_server_infomation()

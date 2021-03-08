@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.auth import views
 
 
- 
+
 urlpatterns = [
     path('', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
@@ -13,6 +13,8 @@ urlpatterns = [
     path('vpn/', include('hotsrvpn.urls')),
     path('deploy/', include('deploy_client.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('backup/', include('backupsender.urls')),
+    path('configserver/', include('configserver.urls')),
 
 ]
 if settings.DEBUG:

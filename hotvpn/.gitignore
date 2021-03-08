@@ -7,7 +7,9 @@ hotbase.sqlite3
 .DS_Store
 vpn_settings.ini
 celerybeat-schedule
-static
-venv
-
+/deploy_client/migrations/
+/venv/
+**/migrations/**
+!**/migrations
+!**/migrations/__init__.py
 

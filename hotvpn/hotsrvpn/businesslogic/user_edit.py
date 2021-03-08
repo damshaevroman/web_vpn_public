@@ -6,7 +6,7 @@ from datetime import date
 from django.core import serializers
 from hotvpn.settings import config_settings
 from hotsrvpn.models import Hotel_User
-
+from hotsrvpn.businesslogic.serializer import UserSerializer
 
 store_cert_path = config_settings["Config"]["certificate_store_path"]
 
@@ -21,15 +21,11 @@ class User_edit():
         return user_database
 
     ''' Create users and add to database Hotel_user table'''
-    def write_user_to_database(self, organization, user_city, user_fio, user_cert):
+    def write_user_to_database(self, hotelSerialize):
         try:
-            user = Hotel_User()
-            user.organisation = organization
-            user.user_city = user_city
-            user.user_fio = user_fio
-            user.user_cert = user_cert
-            user.save()
-            return "User added in database"
+            hotelSerialize.save()
+            user_json = self.get_user_json()
+            return user_json
         except Exception as error:
             logging.warning(error)
             return str(error)
@@ -84,7 +80,7 @@ class User_edit():
             os.remove("/etc/openvpn/easy-rsa/keys/" + str(user_cert) + '.key')
             os.remove("/etc/openvpn/ccd/" + str(user_cert) + '.key')
             os.remove("/etc/openvpn/ccd/" + str(user_cert) + '.crt')
-            return "User deleted" "True"
+            return "User deleted"
         except Exception as error:
             logging.warning(error)
             return str(error)
@@ -100,12 +96,10 @@ class User_edit():
                 data = json.dumps(data)
                 return data
             else:
-                # script_path = "sudo /etc/openvpn/easy-rsa/./auto_uservpn.sh " + str(user_certification)
-                # os.system(script_path)
-                with('/home/roman/Desktop/vpn_3.0/' + user_certification , 'w') as file:
-                    file.write("SDD/var/adas")
+                script_path = "sudo /etc/openvpn/easy-rsa/./auto_uservpn.sh " + str(user_certification)
+                os.system(script_path)
                 time = date.today()
-                time = time.strftime("%d/%m/%Y")
+                time = time.strftime("%Y-%m-%d")
                 user.user_date_of_creation_certificate = time
                 user.save()
                 data = {"result": True,
@@ -129,6 +123,6 @@ class User_edit():
 
     '''create json object from database'''
     def get_user_json(self):
-        user_json = Hotel_User.objects.all()
-        user_json = serializers.serialize("json", user_json)
+        user_json = Hotel_User.objects.all().order_by('user_fio')
+        user_json = UserSerializer(user_json, many=True)
         return user_json

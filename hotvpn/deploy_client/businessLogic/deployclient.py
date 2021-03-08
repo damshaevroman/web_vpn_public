@@ -1,50 +1,65 @@
 # It is deploy_client
-import  logging, tempfile, re
+import json, logging, tempfile, re
 import ansible_runner, paramiko
+from scp import SCPClient
+
 from deploy_client.models import Installed_packeges, Task_and_Status
 from django.core import serializers
+from django.db.models import F
+from deploy_client.serializer import InstalledPackegesSerializer, TaskStatusSerializer
 
-'''This class with functions wich deploy on client servers configs and pprogramm packages'''
+'''This class with functions witch deploy on client servers configs and pprogramm packages'''
 
 
-class ConnectionDeployServer():
+class ConnectionDeployServer:
 
     def __init__(self):
         pass
 
-    '''check sudo passwords for access server '''
+    def write_status_bar(self, hotel_id, deploy_status_bar_count, packages):
+        """ update status and task in database """
+        try:
+            write_status = Task_and_Status.objects.filter(hotel_id=hotel_id)
+            write_status.update(task=packages)
+            write_status.update(status=F('status') + deploy_status_bar_count)
+        except Exception as error:
+            logging.warning(error)
 
     def check_sudo_pass(self, data):
+        """ check sudo passwords for access server """
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(data["ip"], port=int(data["port"]), timeout=10, username=data["login"],
-                        password=data["password"])
-            stdin, stdout, stderr = ssh.exec_command("sudo -l", get_pty=True, timeout=15)
-            stdin.write(data["sudo_password"] + '\n')
+            ssh.connect(data["client_ip"], port=int(data["client_port"]), timeout=10, username=data["client_login"],
+                        password=data["client_password"])
+            stdin, stdout, stderr = ssh.exec_command("sudo -l", get_pty=True, timeout=8)
+            stdin.write(data["client_sudo_password"] + '\n')
             stdin.flush()
             stdout = stdout.read()
             stdout = stdout.decode("utf-8")
             if '(ALL : ALL) ALL' in stdout:
-                return 'OK'
+                stdin, stdout, stderr = ssh.exec_command("ls /sys/class/net/", get_pty=True, timeout=8)
+                stdout = stdout.read()
+                stdout = stdout.decode("UTF-8").replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+                int_data = stdout.split(' ')
+                # int_data = tuple(int_data)
+                int_data = list(filter(None, int_data))
+                return 'OK', int_data
             else:
                 return False
         except Exception as error:
             logging.warning(error)
             return False
 
-
-    ''' data processing install_packages'''
-
     def data_install_packeges_field(self, install_packages):
+        """ data processing install_packages"""
         install_packages = re.sub("^\s+|\n|\r|\s+$", ' ', install_packages)
         install_packages = install_packages.split()
         logging.info('install_packages update')
         return install_packages
 
-    ''' Create config host file for using with playbook '''
-
     def create_host_config(self, client_login, client_ip, client_port, client_password, client_sudo_password):
+        """ Create config host file for using with playbook """
         temp_host = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
         temp_host.write(
             client_ip + ' ansible_user=' + client_login + ' ansible_host=' + client_ip + ' ansible_port=' + client_port +
@@ -54,8 +69,8 @@ class ConnectionDeployServer():
         logging.info('Client host inventory create')
         return temp_host
 
-
     def update_server(self, temp_host):
+        """Just update server"""
         try:
             with tempfile.TemporaryDirectory() as temp_dir_playbook:
 
@@ -74,20 +89,13 @@ class ConnectionDeployServer():
                     return 'SUDO password incorrect'
         except Exception as error:
             logging.warning(error)
-
             return 'Wrong password'
 
-    '''deploy packages from list Textarea'''
-
     def deploy_packeges(self, temp_host, install_packages, hotel_id, deploy_status_bar_count):
-        self.update_server(temp_host)
+        """deploy packages from list Textarea"""
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             for packages in install_packages:
-                counter = deploy_status_bar_count
-                count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-                count_value = count_value.status
-                deploy_count = count_value + counter
-                self.write_status_bar(hotel_id, deploy_count, packages)
+                self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
                 temp_play = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
                 temp_play.write(
                     '---\n- hosts: all\n  gather_facts: no\n  tasks:\n  - name: install ' + packages + '\n' + '    become: yes\n    apt: name=' + packages)
@@ -96,7 +104,6 @@ class ConnectionDeployServer():
                                                   inventory=temp_host.name, json_mode=True)
                 playbookdata = startPlaybok.stdout
                 playbookdata = playbookdata.read()
-
                 if "ok=1" in playbookdata:
                     try:
                         add_task_in_base = Installed_packeges()
@@ -116,9 +123,8 @@ class ConnectionDeployServer():
                     except Exception as error:
                         logging.warning(error)
 
-    '''get data from front and copy config dhcp to server'''
-
     def dhcp_deploy(self, request, temp_host, hotel_id, deploy_status_bar_count):
+        """get data from front and copy config dhcp to server"""
         dhcp_network = request.POST.get("dhcp_network")
         dhcp_mask = request.POST.get("dhcp_mask")
         dhcp_range_start = request.POST.get("dhcp_range_start")
@@ -129,36 +135,31 @@ class ConnectionDeployServer():
         dhcp_range = dhcp_range_start + ' ' + dhcp_range_end
         dhcp_interface = request.POST.get("dhcp_interface")
         install_packages = ['isc-dhcp-server']
+        print('DHCP' + str(dhcp_broadcast))
         self.deploy_packeges(temp_host, install_packages, hotel_id, deploy_status_bar_count)
-
-
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             dest = '/etc/dhcp/dhcpd.conf'
             dhcpd = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-            dhcpd.write('subnet ' + str(dhcp_network) + ' netmask ' + str(dhcp_mask) + ' {\n' + ' range ' + str(
-                dhcp_range) + ';\n' +
-                        ' option domain-name-servers ' + str(
-                dhcp_dns) + ';\n' + ' option domain-name "vpnserver.local";\n option subnet-mask ' +
-                        str(dhcp_mask) + ';\n option routers ' + str(
-                dhcp_gateway) + ';\n' + ' option broadcast-address ' + str(dhcp_broadcast) +
-                        ';\n' + ' default-lease-time 600;\n max-lease-time 7200;\n}')
+            dhcpd.write('subnet ' + str(dhcp_network) + ' netmask ' + str(dhcp_mask) + ' {\n' +
+                        '  range ' + str(dhcp_range) + ';\n' +
+                        '  option domain-name-servers ' + str(dhcp_dns) + ';\n' +
+                        '  option domain-name "vpnserver.local";\n'
+                        '  option subnet-mask ' + str(dhcp_mask) + ';\n'
+                        '  option routers ' + str(dhcp_gateway) + ';\n' +
+                        '  option broadcast-address ' + str(dhcp_broadcast) +';\n' +
+                        '  default-lease-time 600;\n'
+                        '  max-lease-time 7200;\n '
+                        '}')
             dhcpd.seek(0)
 
             playbook_dhcp = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
             playbook_dhcp.write(
                 '---\n- hosts: all\n'
-                '  gather_facts: no\n  tasks:\n'
-                '  - name: copy\n    become: yes\n'
-                '    copy:\n'
-                '    src: ' + dhcpd.name + '\n' + '       dest: ' + dest + '\n'
-                '    owner: root\n'
-                '    group: root\n'
-                '  - name: added dhcp interface\n'
-                '    become: yes\n'
-                '    lineinfile:\n'
-                '       path: /etc/default/isc-dhcp-server\n'
-                '       regexp: INTERFACESv4=""\n'
-                '       line: ' + 'INTERFACESv4="' + dhcp_interface + '"')
+                '  gather_facts: no\n'
+                '  tasks:\n  - name: copy\n'
+                '    become: yes\n    copy:\n'
+                '       src: ' + dhcpd.name + '\n' + '       dest: ' + dest + '\n''       owner: root\n       group: root\n  - name: added dhcp interface\n'
+                                                                       '    become: yes\n    lineinfile:\n       path: /etc/default/isc-dhcp-server\n' + '       regexp: INTERFACESv4=""\n' + '       line: ' + 'INTERFACESv4="' + dhcp_interface + '"')
             playbook_dhcp.seek(0)
             startPlaybok = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbook_dhcp.name,
                                               inventory=temp_host.name, json_mode=True)
@@ -185,26 +186,22 @@ class ConnectionDeployServer():
                 except Exception as error:
                     logging.warning(error)
 
-    '''copy nginx config to server'''
-
     def nginx_deploy(self, request, temp_host, hotel_id, deploy_status_bar_count):
+        """copy nginx config to server"""
         client_login = request.POST.get("client_login")
         packages = "nginx config"
-        count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-        count_value = count_value.status
-        deploy_count = count_value + deploy_status_bar_count
-        self.write_status_bar(hotel_id, deploy_count, packages)
+        self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             dest = '/etc/nginx/sites-available/default'
             nginx = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
             nginx.write('server {\n'
                         '        listen 80 default_server;\n'
-                        '        root /home/' + client_login + '/hoteza;\n'
-                        '        index index.html index.htm index.nginx-debian.html;\n'
-                        '        server_name _;\n'
-                        '        location / {\n'
-                        '                try_files $uri $uri/ =404;\n'
-                        '        }\n}')
+                        '        root /home/' + client_login + '/hadmin;\n'
+                                                               '        index index.html index.htm index.nginx-debian.html;\n'
+                                                               '        server_name _;\n'
+                                                               '        location / {\n'
+                                                               '                try_files $uri $uri/ =404;\n'
+                                                               '        }\n}')
             nginx.seek(0)
 
             playbook_nginx = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
@@ -215,10 +212,10 @@ class ConnectionDeployServer():
                                  '    become: yes\n'
                                  '    copy:\n'
                                  '       src: ' + nginx.name + '\n'
-                                 '       dest: ' + dest + '\n'
-                                 '       owner: root\n'
-                                 '       group: root\n'
-                                 '       mode: "0755"\n')
+                                                               '       dest: ' + dest + '\n'
+                                                                                        '       owner: root\n'
+                                                                                        '       group: root\n'
+                                                                                        '       mode: "0755"\n')
             playbook_nginx.seek(0)
             startPlaybook = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbook_nginx.name,
                                                inventory=temp_host.name, json_mode=True)
@@ -245,15 +242,10 @@ class ConnectionDeployServer():
                 except Exception as error:
                     logging.warning(error)
 
-    ''' add to crontab script'''
-
     def crontab_deploy(self, request, temp_host, hotel_id, deploy_status_bar_count):
-
+        """ add to crontab script"""
         packages = "crontab config"
-        count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-        count_value = count_value.status
-        deploy_count = count_value + deploy_status_bar_count
-        self.write_status_bar(hotel_id, deploy_count, packages)
+        self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
 
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             hotel_id = request.POST.get("hotel_id")
@@ -263,43 +255,43 @@ class ConnectionDeployServer():
                                    '- hosts: all\n'
                                    '  tasks:\n'
                                    '  - cron:\n'
-                                   '      name: hoteza_syn\n'
+                                   '      name: hadmin_syn\n'
                                    '      user: ' + client_login + '\n'
-                                   '      minute: "*/10"\n'
-                                   '      hour: "*"\n'
-                                   '      job: "/home/' + client_login + '/hoteza/utils/download.sh -h ' + hotel_id + ' > /dev/null"\n'
-                                   '  - name: Create log hoteza_sync\n'
-                                   '    become: true\n'
-                                   '    shell:\n'
-                                   '      cmd: echo "start" >> /var/log/hoteza_sync.log\n'
-                                   '  - name: Access to hoteza_sync.log\n'
-                                   '    become: true\n'
-                                   '    file:\n'
-                                   '      path: /var/log/hoteza_sync.log\n'
-                                   '      owner: ' + client_login + '\n'
-                                   '      group: ' + client_login + '\n'
-                                   '      mode: "775"\n'
-                                   '  - name: create hoteza_sync file\n'
-                                   '    become: true\n'
-                                   '    file:\n'
-                                   '         path: "/etc/logrotate.d/hoteza_sync"\n'
-                                   '         state: touch\n'
-                                   '         owner: ' + client_login + '\n'
-                                   '         group: ' + client_login + '\n'
-                                   '         mode: "775"\n'
-                                   '  - name: copy conf to Logrotate to server\n'
-                                   '    become: yes\n'
-                                   '    blockinfile:\n'
-                                   '        path: /etc/logrotate.d/hoteza_sync\n'
-                                   '        block: |\n'
-                                   '                    /var/log/hoteza_sync.log {\n'
-                                   '                        weekly\n'
-                                   '                        missingok\n'
-                                   '                        rotate 8\n'
-                                   '                        compress\n'
-                                   '                        delaycompress\n'
-                                   '                        create 640 hotadmin hotadmin\n'
-                                   '                        }')
+                                                                   '      minute: "*/10"\n'
+                                                                   '      hour: "*"\n'
+                                                                   '      job: "/home/' + client_login + '/hadmin/utils/download.sh -h ' + hotel_id + ' > /dev/null"\n'
+                                                                                                                                                      '  - name: Create log hadmin_sync\n'
+                                                                                                                                                      '    become: true\n'
+                                                                                                                                                      '    shell:\n'
+                                                                                                                                                      '      cmd: echo "start" >> /var/log/hadmin_sync.log\n'
+                                                                                                                                                      '  - name: Access to hadmin_sync.log\n'
+                                                                                                                                                      '    become: true\n'
+                                                                                                                                                      '    file:\n'
+                                                                                                                                                      '      path: /var/log/hadmin_sync.log\n'
+                                                                                                                                                      '      owner: ' + client_login + '\n'
+                                                                                                                                                                                       '      group: ' + client_login + '\n'
+                                                                                                                                                                                                                        '      mode: "775"\n'
+                                                                                                                                                                                                                        '  - name: create hadmin_sync file\n'
+                                                                                                                                                                                                                        '    become: true\n'
+                                                                                                                                                                                                                        '    file:\n'
+                                                                                                                                                                                                                        '         path: "/etc/logrotate.d/hadmin_sync"\n'
+                                                                                                                                                                                                                        '         state: touch\n'
+                                                                                                                                                                                                                        '         owner: ' + client_login + '\n'
+                                                                                                                                                                                                                                                            '         group: ' + client_login + '\n'
+                                                                                                                                                                                                                                                                                                '         mode: "775"\n'
+                                                                                                                                                                                                                                                                                                '  - name: copy conf to Logrotate to server\n'
+                                                                                                                                                                                                                                                                                                '    become: yes\n'
+                                                                                                                                                                                                                                                                                                '    blockinfile:\n'
+                                                                                                                                                                                                                                                                                                '        path: /etc/logrotate.d/hadmin_sync\n'
+                                                                                                                                                                                                                                                                                                '        block: |\n'
+                                                                                                                                                                                                                                                                                                '                    /var/log/hadmin_sync.log {\n'
+                                                                                                                                                                                                                                                                                                '                        weekly\n'
+                                                                                                                                                                                                                                                                                                '                        missingok\n'
+                                                                                                                                                                                                                                                                                                '                        rotate 8\n'
+                                                                                                                                                                                                                                                                                                '                        compress\n'
+                                                                                                                                                                                                                                                                                                '                        delaycompress\n'
+                                                                                                                                                                                                                                                                                                '                        create 640 admin admin\n'
+                                                                                                                                                                                                                                                                                                '                        }')
             playbook_crontab.seek(0)
             startPlaybook = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbook_crontab.name,
                                                inventory=temp_host.name, json_mode=True)
@@ -325,15 +317,10 @@ class ConnectionDeployServer():
                 except Exception as error:
                     logging.warning(error)
 
-    '''add configuration sysctl on server'''
-
     def systemctl_deploy(self, temp_host, hotel_id, deploy_status_bar_count):
-
+        """add configuration sysctl on server"""
         packages = "systemctl.conf config"
-        count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-        count_value = count_value.status
-        deploy_count = count_value + deploy_status_bar_count
-        self.write_status_bar(hotel_id, deploy_count, packages)
+        self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
 
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             playbook_rc_local = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
@@ -378,23 +365,17 @@ class ConnectionDeployServer():
                 except Exception as error:
                     logging.warning(error)
 
-    ''' add to server service rc.local and config'''
-
-    def rclocal_deploy(self, request, temp_host, hotel_id, deploy_status_bar_count):
-
+    def rclocal_deploy(self, request, temp_host, hotel_id, uplink_interface, deploy_status_bar_count):
+        """ add to server service rc.local and config"""
         packages = "rc.local config"
-        count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-        count_value = count_value.status
-        deploy_count = count_value + deploy_status_bar_count
-        self.write_status_bar(hotel_id, deploy_count, packages)
-        uplink_interface = request.POST.get("uplink_interface")
         dhcp_interface = request.POST.get("dhcp_interface")
-        if dhcp_interface == "":
+        if dhcp_interface == '':
             dhcp_interface = uplink_interface
-
+        self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
             playbook_rc_local = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
-            playbook_rc_local.write('---\n- hosts: all\n'
+            playbook_rc_local.write('---\n'
+                                    '- hosts: all\n'
                                     '  gather_facts: no\n'
                                     '  tasks:\n'
                                     '  - name: create rc.local\n'
@@ -412,9 +393,9 @@ class ConnectionDeployServer():
                                     '        marker: ""\n'
                                     '        block: |\n'
                                     '                #!/bin/bash\n'
-                                    '                /etc/init.d/pmsdaemon start\n'
-                                    '                route add -net 224.0.0.0/4 dev ' + dhcp_interface + '\n'
-                                    '                iptables -w --table nat -A POSTROUTING -o ' + uplink_interface + ' -j MASQUERADE\n'
+                                    '                /etc/init.d/pdaemondaemon start\n'
+                                    '                route add -net 224.0.0.0/4 dev ' + str(dhcp_interface) + '\n'
+                                    '                iptables -w --table nat -A POSTROUTING -o ' + str(uplink_interface) + ' -j MASQUERADE\n'
                                     '                exit 0\n'
                                     '  - name: create rc.local service file\n'
                                     '    become: true\n'
@@ -485,28 +466,25 @@ class ConnectionDeployServer():
 
         '''Change hostname of server'''
 
-    def hostname_change(self, request, temp_host, hotel_id, deploy_status_bar_count):
-
+    def hostname_change(self, temp_host, data, deploy_status_bar_count):
         packages = "change hostname"
-        count_value = Task_and_Status.objects.get(hotel_id=hotel_id)
-        count_value = count_value.status
-        deploy_count = count_value + deploy_status_bar_count
-        self.write_status_bar(hotel_id, deploy_count, packages)
+
+        self.write_status_bar(data["hotel_id"], deploy_status_bar_count, packages)
         with tempfile.TemporaryDirectory() as temp_dir_playbook:
-            hostname = request.POST.get("hostname")
+            hostname = data["hostname"]
             playbook_hostname = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
             playbook_hostname.write('---\n- hosts: all\n'
-                                     '  gather_facts: no\n'
-                                     '  tasks:\n'
-                                     '  - name: add ti sysctl.conf\n'
-                                     '    become: yes\n'
-                                     '    lineinfile:\n'
-                                     '        path: /etc/cloud/cloud.cfg\n'
-                                     '        regexp: "preserve_hostname: false"\n'
-                                     '        line: "preserve_hostname: true"\n'
-                                     '  - name: change hostname\n'
-                                     '    become: yes\n'
-                                     '    shell: sudo hostnamectl set-hostname ' + hostname)
+                                    '  gather_facts: no\n'
+                                    '  tasks:\n'
+                                    '  - name: /et/cloud/cloud.cfg\n'
+                                    '    become: yes\n'
+                                    '    lineinfile:\n'
+                                    '        path: /etc/cloud/cloud.cfg\n'
+                                    '        regexp: "preserve_hostname:"\n'
+                                    '        line: "preserve_hostname: true"\n'
+                                    '  - name: change hostname\n'
+                                    '    become: yes\n'
+                                    '    shell: sudo hostnamectl set-hostname ' + hostname)
             playbook_hostname.seek(0)
             startPlaybok = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbook_hostname.name,
                                               inventory=temp_host.name, json_mode=True)
@@ -517,7 +495,7 @@ class ConnectionDeployServer():
                 try:
                     add_task_in_base = Installed_packeges()
                     add_task_in_base.task_completed = "hostname changed"
-                    add_task_in_base.hotel_id = hotel_id
+                    add_task_in_base.hotel_id = data["hotel_id"]
                     add_task_in_base.save()
                     logging.info('hostname copied')
                 except Exception as error:
@@ -526,16 +504,174 @@ class ConnectionDeployServer():
                 try:
                     add_task_in_base = Installed_packeges()
                     add_task_in_base.task_non_completed = "hostname did not change"
-                    add_task_in_base.hotel_id = hotel_id
+                    add_task_in_base.hotel_id = data["hotel_id"]
                     add_task_in_base.save()
                     logging.info('hostname config did not change')
                 except Exception as error:
                     logging.warning(error)
 
+    def git_load(self, temp_host, git):
+        """ Download from bitbuchet directory hadmin, pdaemondaemon"""
+        package = ['git']
+        self.deploy_packeges(temp_host, package, git["hotel_id"], 0)
+        git_list = git["git_checkbox"]
+        git_list = git_list.split(',')
+        git_status = Task_and_Status.objects.filter(hotel_id=git["hotel_id"])
+        for task in git_list:
+            git_status.update(git_task=task)
+            if 'hadmin' in task:
+                with tempfile.TemporaryDirectory() as temp_dir_playbook:
+                    playbook_bitbucket = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+                    playbook_bitbucket.write('---\n'
+                                             '- hosts: all\n'
+                                             '  gather_facts: no\n'
+                                             '  tasks:\n'
+                                             '  - name: install hadminTV\n'
+                                             '    git:\n'
+                                             '      repo: "https://' + git["git_login"] + ':' + git["git_password"] + '@bitbucket.org/hadminteam/tv.git"\n'
+                                             '      dest: /home/' + git["client_login"] + '/hadmin\n'
+                                             '      version: develop\n' 
+                                             '  - name: create directory c\n'
+                                             '    file:\n'
+                                             '       path: /home/' + git["client_login"] + '/hadmin/c\n'
+                                             '       state: directory\n'
+                                             '  - name: Copy config.js\n'
+                                             '    shell:\n'
+                                             '        cmd: cp /home/' + git["client_login"] + '/hadmin/tv/config_def.js /home/' + git["client_login"] + '/hadmin/tv/config.js\n'
+                                             '  - name: Copy config.css\n'
+                                             '    shell:\n'
+                                             '        cmd: cp /home/' + git["client_login"] + '/hadmin/tv/config_def.css /home/' + git["client_login"] + '/hadmin/tv/config.css')
+                    try:
+                        playbook_bitbucket.seek(0)
+                        startPlaybok = ansible_runner.run(private_data_dir=temp_dir_playbook,
+                                                          playbook=playbook_bitbucket.name,
+                                                          inventory=temp_host.name, json_mode=True)
+                        playbookdata = startPlaybok.stdout
+                        playbookdata = playbookdata.read()
+                        playbook_bitbucket.close()
+                    except Exception as error:
+                        logging.warning(error)
+                    if "ok=4" in playbookdata:
+                        try:
+                            add_task_in_base = Installed_packeges()
+                            add_task_in_base.installed = "hadmin TV"
+                            add_task_in_base.hotel_id = git["hotel_id"]
+                            add_task_in_base.save()
+                        except Exception as error:
+                            logging.warning(error)
+                    else:
+                        try:
+                            add_task_in_base = Installed_packeges()
+                            add_task_in_base.non_install = "hadmin TV"
+                            add_task_in_base.hotel_id = git["hotel_id"]
+                            add_task_in_base.save()
+                        except Exception as error:
+                            logging.warning(error)
 
-    def check_intalled_packeges(self, hotel):
+            if 'pdaemondaemon' in task:
+                with tempfile.TemporaryDirectory() as temp_dir_playbook:
+                    playbook_bitbucket = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+                    playbook_bitbucket.write('---\n'
+                                             '- hosts: all\n'
+                                             '  gather_facts: no\n'
+                                             '  tasks:\n'
+                                             '  - name: install git pdaemondaemon\n'
+                                             '    git:\n'
+                                             '      repo: "https://' +  git["git_login"] + ':' + git["git_password"] + '@bitbucket.org/hadminteam/pdaemondaemon.git"\n'
+                                             '      dest: /home/' + git["client_login"] + '/pdaemondaemon\n'
+                                             '  - name: Install pdaemondaemon\n'
+                                             '    become: yes\n'
+                                             '    command: python3 setup.py install --force\n'
+                                             '    args:\n'
+                                             '       chdir: /home/' + git["client_login"] + '/pdaemondaemon/\n'
+                                             '  - name: added hotel number to pdaemon\n'
+                                             '    become: yes\n'
+                                             '    lineinfile:\n'
+                                             '        path: /etc/pdaemondaemon.cfg\n'
+                                             '        regexp: "^hotel_id = "\n'
+                                             '        line: "hotel_id = ' + git["hotel_id"] + '"')
+                    try:
+                        playbook_bitbucket.seek(0)
+                        startPlaybok = ansible_runner.run(private_data_dir=temp_dir_playbook,
+                                                          playbook=playbook_bitbucket.name,
+                                                          inventory=temp_host.name, json_mode=True)
+                        playbookdata = startPlaybok.stdout
+                        playbookdata = playbookdata.read()
+                        playbook_bitbucket.close()
+                    except Exception as error:
+                        logging.warning(error)
+                    if "ok=3" in playbookdata:
+                        try:
+                            add_task_in_base = Installed_packeges()
+                            add_task_in_base.installed = "pdaemondaemon"
+                            add_task_in_base.hotel_id = git["hotel_id"]
+                            add_task_in_base.save()
+                        except Exception as error:
+                            logging.warning(error)
+                    else:
+                        try:
+                            add_task_in_base = Installed_packeges()
+                            add_task_in_base.non_install = "pdaemondaemon not downloaded"
+                            add_task_in_base.hotel_id = git["hotel_id"]
+                            add_task_in_base.save()
+                        except Exception as error:
+                            logging.warning(error)
+        git_status.update(git_task=' git completed')
+        return 'Finish'
+
+    ''' pdaemondaemon deploy in /etc/init.d/ and added hotel id in /etc pdaemondeamon.cfg'''
+
+    def pdaemondaemon_deploy(self, request, temp_host, hotel_id, deploy_status_bar_count):
+        packages = "pdaemondaemon config"
+        self.write_status_bar(hotel_id, deploy_status_bar_count, packages)
+
+        client_login = request.POST.get("client_login")
+        with tempfile.TemporaryDirectory() as temp_dir_playbook:
+            playbookpdaemon = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+            playbookpdaemon.write('---\n- hosts: all\n'
+                              '  gather_facts: no\n'
+                              '  tasks:\n'
+                              '  - name: pdaemondaemon deploy\n'
+                              '    become: yes\n'
+                              '    command: python3 setup.py install --force\n'
+                              '    args:\n'
+                              '      chdir: /home/' + client_login + '/pdaemondaemon/\n'
+                                                                     '  - name: add ID hotel to /etc/pdaemondaemon\n'
+                                                                     '    become: yes\n'
+                                                                     '    lineinfile:\n'
+                                                                     '        path: /etc/pdaemondaemon.cfg\n'
+                                                                     '        regexp: "^hotel_id = 0"\n'
+                                                                     '        line: "hotel_id = ' + str(hotel_id) + '"')
+            playbookpdaemon.seek(0)
+            startPlaybook = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbookpdaemon.name,
+                                               inventory=temp_host.name, json_mode=True)
+            playbookdata = startPlaybook.stdout
+            playbookdata = playbookdata.read()
+            playbookpdaemon.close()
+            if "ok=2" in playbookdata:
+                try:
+                    add_task_in_base = Installed_packeges()
+                    add_task_in_base.task_completed = "pdaemondamon config"
+                    add_task_in_base.hotel_id = hotel_id
+                    add_task_in_base.save()
+                    logging.info('hostname copied')
+                except Exception as error:
+                    logging.warning(error)
+            else:
+                try:
+                    add_task_in_base = Installed_packeges()
+                    add_task_in_base.task_non_completed = "pdaemondeamon config"
+                    add_task_in_base.hotel_id = hotel_id
+                    add_task_in_base.save()
+                    logging.info('hostname config non copied')
+                except Exception as error:
+                    logging.warning(error)
+
+    ''' request to database in table DeployClient_installed_packeges '''
+
+    def check_intalled_packeges(self, hotel_id):
         try:
-            hotel_id = int(hotel["hotel_id"])
+            hotel_id = int(hotel_id)
             data_list = Installed_packeges.objects.filter(hotel_id=hotel_id)
             install_list = serializers.serialize('json', data_list)
             Installed_packeges.objects.filter(hotel_id=hotel_id).delete()
@@ -555,18 +691,10 @@ class ConnectionDeployServer():
         except Exception as error:
             logging.warning(error)
 
-    ''' update status and task in database '''
-    def write_status_bar(self, hotel_id, status_value, status_task):
-        try:
-            write_status = Task_and_Status.objects.filter(hotel_id=hotel_id)
-            write_status.update(task=status_task)
-            write_status.update(status=status_value)
-        except Exception as error:
-            logging.warning(error)
-
     ''' write finished record in database'''
     def write_finish(self, hotel_id, status_value, status_task):
         try:
+            pass
             write_status = Task_and_Status.objects.filter(hotel_id=hotel_id)
             write_status.update(task="Finish")
             write_status.update(status=100)
@@ -576,15 +704,91 @@ class ConnectionDeployServer():
     ''' get data in database and send to frontend'''
     def check_status_bar(self, hotel_id):
         try:
-            deploy_status_bar = Task_and_Status.objects.get(hotel_id=hotel_id)
-            result = {
-                "task": deploy_status_bar.task,
-                "status": deploy_status_bar.status
-            }
+            deploy_status_bar = Task_and_Status.objects.filter(hotel_id=hotel_id)
+            result = TaskStatusSerializer(deploy_status_bar, many=True)
             return result
         except Exception as error:
             logging.warning(error)
 
-    ''' erase record in database'''
+    ''' erase record in database Task_and_Status'''
     def erase_record_from_base(self, hotel_id):
         Task_and_Status.objects.filter(hotel_id=hotel_id).delete()
+
+    def erase_Task_and_Status(self):
+        try:
+            Task_and_Status.objects.all().delete
+            Task_and_Status.save()
+            return "OK"
+        except Exception as error:
+            logging.warning(error)
+
+
+    def add_backrsync(self, temp_host, data, deploy_status_bar_count):
+        """ add backup rsync script"""
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(data["client_ip"], port=int(data["client_port"]), timeout=10, username=data["client_login"], password=data["client_password"])
+            scp = SCPClient(ssh.get_transport())
+            scp.put('/var/www/backup_rsync', recursive=True, remote_path='/home/' + data["client_login"])
+            scp.close()
+            copied = True
+        except Exception as error:
+            copied = False
+            logging.warning(error)
+        packages = "backup rsycnc"
+        self.write_status_bar(data["hotel_id"], deploy_status_bar_count, packages)
+        with tempfile.TemporaryDirectory() as temp_dir_playbook:
+            pathcert = '"' + "{{ lookup('file', lookup('env','HOME') + '/root/.ssh/key_hotbackup/id_rsa.pub') }}" + '"'
+            playbook_crontab = tempfile.NamedTemporaryFile(mode='w+t', delete=False)
+            playbook_crontab.write('---\n'
+                                   '- hosts: all\n'
+                                   '  tasks:\n'
+                                   '  - cron:\n'
+                                   '      name: Backtask\n'
+                                   '      user: ' + data["client_login"] + '\n'
+                                   '      minute: "0"\n'
+                                   '      hour: "0"\n'
+                                   '      day: "23"\n'                                        
+                                   '      job: "/home/' + data["client_login"] + '/backup_rsync/start.sh"\n'
+                                   '  - name: Add the user hotbackup\n'                                        
+                                   '    user:\n'
+                                   '      name: hotbackup\n'
+                                   '      shell: /bin/bash\n'
+                                   '      append: yes\n'
+                                   '    become: yes\n'                                                    
+                                   '  - name: Add key hotbackup\n'
+                                   '    authorized_key:\n'
+                                   '      user: hotbackup\n'
+                                   '      state: present\n'
+                                   '      key: ' + pathcert + '\n'
+                                   '    become: yes\n'
+                                   )
+            playbook_crontab.seek(0)
+            startPlaybook = ansible_runner.run(private_data_dir=temp_dir_playbook, playbook=playbook_crontab.name,
+                                               inventory=temp_host.name, json_mode=True)
+            playbookdata = startPlaybook.stdout
+            playbookdata = playbookdata.read()
+            playbook_crontab.close()
+            if "ok=4" in playbookdata and copied == True:
+                try:
+                    add_task_in_base = Installed_packeges()
+                    add_task_in_base.task_completed = "backup rsycnc copied"
+                    add_task_in_base.hotel_id = data["hotel_id"]
+                    add_task_in_base.save()
+                    logging.info('backup rsycnc copied')
+                except Exception as error:
+                    logging.warning(error)
+            else:
+                try:
+                    add_task_in_base = Installed_packeges()
+                    add_task_in_base.task_non_completed = "backup rsycnc did not copy"
+                    add_task_in_base.hotel_id = data["hotel_id"]
+                    add_task_in_base.save()
+                    logging.info('backup rsycnc did not copy')
+                except Exception as error:
+                    logging.warning(error)
+
+
+
+

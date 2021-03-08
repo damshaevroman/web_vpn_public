@@ -1,0 +1,137 @@
+{% extends "hotsrvpn/base.html" %}
+{% load static %}
+
+{% block content %}
+    <form id="serverConfigForm">
+    {% csrf_token %}
+        <div class="row" style="padding-left: 1%">
+            <div class="col-xl-3 col-md-6 mb-4">
+                <input type="text" name="nameserver" placeholder="Name server" class="form-control form-control-user"
+                       id="nameserver" maxlength="100">
+
+                <div class="dropdown serverconfigClass" >
+                <div class="select">
+                      <span>Select protocol</span>
+                      <i class="fa fa-chevron-left"></i>
+                    </div>
+                    <input type="hidden" name="protocol">
+                    <ul class="dropdown-menu">
+                      <li id="UDP">UDP</li>
+                      <li id="TCP">TCP</li>
+                    </ul>
+                </div>
+
+                <div class="dropdown serverconfigClass" >
+                <div class="select">
+                  <span>Select type interface</span>
+                  <i class="fa fa-chevron-left"></i>
+                </div>
+                <input type="hidden" name="typeInterface">
+                <ul class="dropdown-menu">
+                  <li id="tun">TUN</li>
+                  <li id="tap">TAP</li>
+                </ul>
+                </div>
+
+                <input type="text" name="serverport" placeholder="Server port" class="form-control form-control-user serverconfigClass" id="serverport" maxlength="5">
+                <input type="text" name="serverip" placeholder="IP server" class="form-control form-control-user serverconfigClass" id="serverip" >
+                <input type="text" name="subnetmask" placeholder="Subnet mask" class="form-control form-control-user serverconfigClass" id="subnetmask" >
+                <input type="text" name="startIP" placeholder="IP start" class="form-control form-control-user serverconfigClass" id="startIP" >
+                <input type="text" name="endIP" placeholder="IP end" class="form-control form-control-user serverconfigClass" id="endIP" >
+
+                <div class="input-group mb-3 serverconfigClass ">
+                  <div class="custom-file">
+                    <input type="file" accept=".crt" name="crt" class="custom-file-input" id="crt"  onchange="updateUploadText()" >
+                    <label class="custom-file-label" for="inputFile" id="labelCrt">Choose CA certificate</label>
+                  </div>
+                </div>
+                <div class="input-group mb-3 serverconfigClass ">
+                  <div class="custom-file">
+                    <input type="file" accept=".cert" name="cert" class="custom-file-input" id="cert"  onchange="updateUploadText()" required>
+                    <label class="custom-file-label" for="inputFile" id="labelCert">Choose Cert certificate</label>
+                  </div>
+
+                </div>
+                <div class="input-group mb-3 serverconfigClass ">
+                  <div class="custom-file">
+                    <input type="file" accept=".key" name="key" class="custom-file-input" id="key"  onchange="updateUploadText()" required>
+                    <label class="custom-file-label" for="inputFile" id="labelKey">Choose Key certificate</label>
+                  </div>
+                </div>
+
+                <div class="input-group mb-3 serverconfigClass ">
+                  <div class="custom-file">
+                    <input type="file" accept=".pem" name="dh" class="custom-file-input" id="dh"  onchange="updateUploadText()" required>
+                    <label class="custom-file-label" for="inputFile" id="labelDh">Choose DH certificate</label>
+                  </div>
+                </div>
+                <div class="input-group mb-3 serverconfigClass ">
+                  <div class="custom-file">
+                    <input type="file" accept=".ta" name="ta" class="custom-file-input" id="ta"  onchange="updateUploadText()" required>
+                    <label class="custom-file-label" for="inputFile" id="labelTa">Choose TA certificate</label>
+                  </div>
+                </div>
+
+
+                <button type="button" class="btn btn-primary" onclick="createServer()">START</button>
+            </div>
+{#            <div class="col-xl-1 col-md-1 mb-1 infoButtons">#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{#                <div class="diveInfoButton">#}
+{#                <a href="#" class="btn btn-info btn-circle btn-sm">#}
+{#                    <i class="fas fa-info-circle"></i>#}
+{#                  </a>#}
+{#                </div>#}
+{##}
+{#            </div>#}
+
+        </div>
+
+    </form>
+
+
+
+        <link href="{% static "configserver/css/list.css" %}" rel="stylesheet" type="text/css" >
+        <script src="{% static "configserver/js/dropMenu.js" %}"></script>
+{% endblock %}
+
+

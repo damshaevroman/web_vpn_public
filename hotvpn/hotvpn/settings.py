@@ -6,10 +6,10 @@ https://docs.djangoproject.com/en/1.11/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/1.11/ref/settings/
 """
+
 import configparser
 import logging
 import os
-
 
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -19,6 +19,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 config_settings = configparser.ConfigParser()
 config_settings.read(os.path.join(BASE_DIR, "vpn_settings.ini"))
 
+backup_login = config_settings["Config"]["backup_login"]
+backup_ip = config_settings["Config"]["backup_server"]
+backup_port = config_settings["Config"]["backup_server_port"]
+
+"""Write server hardware information to database"""
+# Dashboard.write_server_infomation()
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.11/howto/deployment/checklist/
 
@@ -28,6 +34,8 @@ SECRET_KEY = config_settings["Setting.py"]["secret_key"]
 DEBUG = True
 
 ALLOWED_HOSTS = [config_settings["Setting.py"]["ip_address"]]
+
+
 
 # Application definition
 
@@ -40,12 +48,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'crispy_forms',
-
+    'rest_framework',
 
     'hotsrvpn',
     'deploy_client',
     'accounts',
     'dashboard',
+    'backupsender',
+    'configserver',
 
 ]
 
@@ -90,6 +100,17 @@ DATABASES = {
         'NAME': os.path.join(BASE_DIR, config_settings["Database"]["name_base_sqlite"]),
     }
 }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#         'NAME': 'mytest',
+#         'USER': 'admin',
+#         'PASSWORD': '123',
+#         'HOST': '127.0.0.1',
+#         'PORT': '5432',
+#     }
+# }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/1.11/ref/settings/#auth-password-validators
@@ -144,13 +165,17 @@ SESSION_EXPIRE_AFTER_LAST_ACTIVITY = True
 SESSION_EXPIRE_AFTER_LAST_ACTIVITY_GRACE_PERIOD = 60  # group by minute
 SESSION_TIMEOUT_REDIRECT = '/'
 
-
 logging.basicConfig(level='DEBUG', filename=config_settings["Config"]["log_path"], filemode='a',
                     format='%(asctime)s - %(levelname)s - %(message)s',
                     datefmt='%d-%b-%y %H:%M:%S')
 
-
-#celery
+# celery
 CELERY_BROKER_URL = 'redis://localhost:6379'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+
+# Upload files
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+
